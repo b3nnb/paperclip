@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { Project } from "@paperclipai/shared";
+import { PROJECT_STATUSES, type Project } from "@paperclipai/shared";
 import type { ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
@@ -83,6 +83,15 @@ vi.mock("@/plugins/slots", () => ({
 vi.mock("@/plugins/launchers", () => ({ PluginLauncherOutlet: () => null }));
 vi.mock("../components/ProjectProperties", () => ({
   ProjectProperties: () => <div data-testid="project-properties" />,
+  SaveIndicator: ({ state }: { state: string }) =>
+    state === "idle" ? null : <span data-testid="project-status-save-state">{state}</span>,
+}));
+vi.mock("@/components/ui/popover", () => ({
+  Popover: ({ children }: { children?: ReactNode }) => <>{children}</>,
+  PopoverTrigger: ({ children }: { children?: ReactNode }) => <>{children}</>,
+  PopoverContent: ({ children }: { children?: ReactNode }) => (
+    <div data-testid="popover-content">{children}</div>
+  ),
 }));
 vi.mock("../components/BudgetPolicyCard", () => ({
   BudgetPolicyCard: () => <div data-testid="budget-policy-card" />,
@@ -346,6 +355,130 @@ describe("ProjectDetail", () => {
 
       expect(container.querySelector('[data-testid="navigate"]')?.textContent)
         .toBe("/projects/project-1/issues");
+    });
+  });
+
+  describe("project status picker", () => {
+    function statusOptions() {
+      return Array.from(container.querySelectorAll('[data-testid="project-status-option"]'));
+    }
+    function findStatusOption(label: string): HTMLElement | null {
+      const match = statusOptions().find((btn) => btn.textContent?.trim() === label);
+      return match instanceof HTMLElement ? match : null;
+    }
+    async function renderDetail() {
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      await act(async () => {
+        root = createRoot(container);
+        root.render(
+          <QueryClientProvider client={queryClient}>
+            <ProjectDetail />
+          </QueryClientProvider>,
+        );
+      });
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+    }
+    async function flush() {
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+    }
+
+    it("renders the status chip next to the title with the current status", async () => {
+      await renderDetail();
+
+      const trigger = container.querySelector('button[aria-label="Change project status"]');
+      expect(trigger).not.toBeNull();
+      expect(trigger?.textContent).toContain("in progress");
+      // The chip sits in the header row with the editable project name.
+      const nameEditor = Array.from(container.querySelectorAll("span")).find(
+        (node) => node.textContent === "Managed Project",
+      );
+      expect(nameEditor && trigger
+        ? Boolean(nameEditor.compareDocumentPosition(trigger) & Node.DOCUMENT_POSITION_FOLLOWING)
+        : false).toBe(true);
+    });
+
+    it("lists exactly the five PROJECT_STATUSES with a check on the current one", async () => {
+      await renderDetail();
+
+      expect(PROJECT_STATUSES).toHaveLength(5);
+      const options = statusOptions();
+      expect(options).toHaveLength(5);
+      const labels = options.map((btn) => btn.textContent?.trim());
+      for (const status of PROJECT_STATUSES) {
+        expect(labels).toContain(status.replace(/[_-]/g, " "));
+      }
+      const current = options.find((btn) => btn.querySelector("svg"));
+      expect(current?.textContent?.trim()).toBe("in progress");
+    });
+
+    it("persists a picked status via PATCH and refreshes the project queries", async () => {
+      mockProjectsApi.update.mockResolvedValue(project({ status: "completed" }));
+      await renderDetail();
+
+      const completed = findStatusOption("completed");
+      expect(completed).not.toBeNull();
+      await act(async () => {
+        completed?.click();
+      });
+      await flush();
+
+      expect(mockProjectsApi.update).toHaveBeenCalledWith(
+        "project-1",
+        { status: "completed" },
+        "company-1",
+      );
+      // Per-field save state reached "saved"…
+      expect(container.querySelector('[data-testid="project-status-save-state"]')?.textContent)
+        .toBe("saved");
+      // …and the chip + project queries refresh (detail refetch fires).
+      expect(mockProjectsApi.get.mock.calls.length).toBeGreaterThan(1);
+    });
+
+    it("does not PATCH when the current status is picked again", async () => {
+      await renderDetail();
+
+      const current = findStatusOption("in progress");
+      expect(current).not.toBeNull();
+      await act(async () => {
+        current?.click();
+      });
+      await flush();
+
+      expect(mockProjectsApi.update).not.toHaveBeenCalled();
+    });
+
+    it("disables the chip while saving and surfaces a failed save", async () => {
+      let rejectUpdate: ((reason: Error) => void) | null = null;
+      mockProjectsApi.update.mockImplementation(
+        () => new Promise<Project>((_, reject) => { rejectUpdate = reject; }),
+      );
+      await renderDetail();
+
+      const backlog = findStatusOption("backlog");
+      expect(backlog).not.toBeNull();
+      await act(async () => {
+        backlog?.click();
+      });
+
+      const trigger = container.querySelector('button[aria-label="Change project status"]');
+      expect(trigger?.hasAttribute("disabled")).toBe(true);
+      expect(container.querySelector('[data-testid="project-status-save-state"]')?.textContent)
+        .toBe("saving");
+
+      await act(async () => {
+        rejectUpdate?.(new Error("network down"));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      expect(container.querySelector('[data-testid="project-status-save-state"]')?.textContent)
+        .toBe("error");
     });
   });
 });
