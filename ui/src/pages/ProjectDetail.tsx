@@ -602,13 +602,30 @@ export function ProjectDetail() {
   }, []);
 
   // Optimistic chip value: after a pick, the chip shows the new status right
-  // away instead of lagging behind the refetch. Clear it once the refetched
-  // project confirms the value, and reset when navigating to another project.
-  useEffect(() => {
-    setOptimisticStatus((current) => (current !== null && project?.status === current ? null : current));
-  }, [project?.status]);
+  // away instead of lagging behind the refetch. When a fresh status arrives
+  // from the server — including one changed by another operator after our
+  // PATCH — drop the optimistic value so the chip always reflects the
+  // current project state.
   useEffect(() => {
     setOptimisticStatus(null);
+  }, [project?.status]);
+  // Navigating to another project must not carry the status chip's save
+  // feedback across: supersede any in-flight status save so its late
+  // resolution is ignored, drop its reset timer, and clear the indicator.
+  useEffect(() => {
+    fieldSaveRequestIds.current["status"] = (fieldSaveRequestIds.current["status"] ?? 0) + 1;
+    const timer = fieldSaveTimers.current["status"];
+    if (timer) {
+      clearTimeout(timer);
+      delete fieldSaveTimers.current["status"];
+    }
+    setOptimisticStatus(null);
+    setFieldSaveStates((current) => {
+      if (!("status" in current)) return current;
+      const next = { ...current };
+      delete next.status;
+      return next;
+    });
   }, [project?.id]);
 
   const setFieldState = useCallback((field: ProjectConfigFieldKey, state: ProjectFieldSaveState) => {

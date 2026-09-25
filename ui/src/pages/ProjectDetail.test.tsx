@@ -486,6 +486,30 @@ describe("ProjectDetail", () => {
       expect(statusTrigger()?.textContent).toContain("completed");
     });
 
+    it("drops the optimistic chip when the refetch returns a different status", async () => {
+      // Our PATCH persists "completed", but another operator's change wins the
+      // refetch: the chip must follow the server, not the optimistic pick.
+      mockProjectsApi.update.mockResolvedValue(project({ status: "completed" }));
+      await renderDetail();
+      mockProjectsApi.get.mockResolvedValue(project({ status: "cancelled" }));
+      await openPicker();
+
+      const completed = findStatusOption("completed");
+      expect(completed).not.toBeNull();
+      await act(async () => {
+        completed?.click();
+      });
+      await flush();
+
+      expect(mockProjectsApi.update).toHaveBeenCalledWith(
+        "project-1",
+        { status: "completed" },
+        "company-1",
+      );
+      expect(statusTrigger()?.textContent).toContain("cancelled");
+      expect(statusTrigger()?.textContent).not.toContain("completed");
+    });
+
     it("does not PATCH when the current status is picked again", async () => {
       await renderDetail();
       await openPicker();
