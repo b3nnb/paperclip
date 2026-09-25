@@ -86,13 +86,39 @@ vi.mock("../components/ProjectProperties", () => ({
   SaveIndicator: ({ state }: { state: string }) =>
     state === "idle" ? null : <span data-testid="project-status-save-state">{state}</span>,
 }));
-vi.mock("@/components/ui/popover", () => ({
-  Popover: ({ children }: { children?: ReactNode }) => <>{children}</>,
-  PopoverTrigger: ({ children }: { children?: ReactNode }) => <>{children}</>,
-  PopoverContent: ({ children }: { children?: ReactNode }) => (
-    <div data-testid="popover-content">{children}</div>
-  ),
-}));
+// Stateful popover fake: the trigger toggles open, content renders only while
+// open. This keeps the picker's own open/close contract testable (tap the chip
+// to open, pick a status, the list closes) without Radix portal machinery.
+vi.mock("@/components/ui/popover", async () => {
+  const { createContext, useContext } = await import("react");
+  const PopoverContext = createContext<{ open: boolean; toggle: () => void }>({
+    open: false,
+    toggle: () => {},
+  });
+  return {
+    Popover: ({
+      children,
+      open,
+      onOpenChange,
+    }: {
+      children?: ReactNode;
+      open?: boolean;
+      onOpenChange?: (next: boolean) => void;
+    }) => (
+      <PopoverContext.Provider value={{ open: Boolean(open), toggle: () => onOpenChange?.(!open) }}>
+        {children}
+      </PopoverContext.Provider>
+    ),
+    PopoverTrigger: ({ children }: { children?: ReactNode }) => {
+      const ctx = useContext(PopoverContext);
+      return <span onClick={ctx.toggle}>{children}</span>;
+    },
+    PopoverContent: ({ children }: { children?: ReactNode }) => {
+      const ctx = useContext(PopoverContext);
+      return ctx.open ? <div data-testid="popover-content">{children}</div> : null;
+    },
+  };
+});
 vi.mock("../components/BudgetPolicyCard", () => ({
   BudgetPolicyCard: () => <div data-testid="budget-policy-card" />,
 }));
@@ -366,6 +392,16 @@ describe("ProjectDetail", () => {
       const match = statusOptions().find((btn) => btn.textContent?.trim() === label);
       return match instanceof HTMLElement ? match : null;
     }
+    function statusTrigger(): HTMLElement | null {
+      return container.querySelector('button[aria-label^="Change project status"]');
+    }
+    async function openPicker() {
+      const trigger = statusTrigger();
+      expect(trigger).not.toBeNull();
+      await act(async () => {
+        trigger?.click();
+      });
+    }
     async function renderDetail() {
       const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
       await act(async () => {
@@ -388,12 +424,14 @@ describe("ProjectDetail", () => {
       });
     }
 
-    it("renders the status chip next to the title with the current status", async () => {
+    it("renders the status chip next to the title and keeps options hidden until tapped", async () => {
       await renderDetail();
 
-      const trigger = container.querySelector('button[aria-label="Change project status"]');
+      const trigger = statusTrigger();
       expect(trigger).not.toBeNull();
       expect(trigger?.textContent).toContain("in progress");
+      expect(trigger?.getAttribute("aria-label")).toBe("Change project status (current: in progress)");
+      expect(statusOptions()).toHaveLength(0);
       // The chip sits in the header row with the editable project name.
       const nameEditor = Array.from(container.querySelectorAll("span")).find(
         (node) => node.textContent === "Managed Project",
@@ -403,8 +441,9 @@ describe("ProjectDetail", () => {
         : false).toBe(true);
     });
 
-    it("lists exactly the five PROJECT_STATUSES with a check on the current one", async () => {
+    it("opens from the chip and lists exactly the five PROJECT_STATUSES", async () => {
       await renderDetail();
+      await openPicker();
 
       expect(PROJECT_STATUSES).toHaveLength(5);
       const options = statusOptions();
@@ -413,19 +452,24 @@ describe("ProjectDetail", () => {
       for (const status of PROJECT_STATUSES) {
         expect(labels).toContain(status.replace(/[_-]/g, " "));
       }
-      const current = options.find((btn) => btn.querySelector("svg"));
+      const current = options.find((btn) => btn.getAttribute("aria-current") === "true");
       expect(current?.textContent?.trim()).toBe("in progress");
     });
 
-    it("persists a picked status via PATCH and refreshes the project queries", async () => {
+    it("persists a picked status via PATCH, closes the picker, and refreshes the chip", async () => {
       mockProjectsApi.update.mockResolvedValue(project({ status: "completed" }));
       await renderDetail();
+      // After the initial load, the refetch returns the persisted project.
+      mockProjectsApi.get.mockResolvedValue(project({ status: "completed" }));
+      await openPicker();
 
       const completed = findStatusOption("completed");
       expect(completed).not.toBeNull();
       await act(async () => {
         completed?.click();
       });
+      // The picker closes on selection.
+      expect(statusOptions()).toHaveLength(0);
       await flush();
 
       expect(mockProjectsApi.update).toHaveBeenCalledWith(
@@ -436,12 +480,15 @@ describe("ProjectDetail", () => {
       // Per-field save state reached "saved"…
       expect(container.querySelector('[data-testid="project-status-save-state"]')?.textContent)
         .toBe("saved");
-      // …and the chip + project queries refresh (detail refetch fires).
+      // …the detail query refetched…
       expect(mockProjectsApi.get.mock.calls.length).toBeGreaterThan(1);
+      // …and the chip reads the refreshed status, not the optimistic value.
+      expect(statusTrigger()?.textContent).toContain("completed");
     });
 
     it("does not PATCH when the current status is picked again", async () => {
       await renderDetail();
+      await openPicker();
 
       const current = findStatusOption("in progress");
       expect(current).not.toBeNull();
@@ -453,12 +500,13 @@ describe("ProjectDetail", () => {
       expect(mockProjectsApi.update).not.toHaveBeenCalled();
     });
 
-    it("disables the chip while saving and surfaces a failed save", async () => {
+    it("disables the chip while saving and reverts the chip on a failed save", async () => {
       let rejectUpdate: ((reason: Error) => void) | null = null;
       mockProjectsApi.update.mockImplementation(
         () => new Promise<Project>((_, reject) => { rejectUpdate = reject; }),
       );
       await renderDetail();
+      await openPicker();
 
       const backlog = findStatusOption("backlog");
       expect(backlog).not.toBeNull();
@@ -466,10 +514,12 @@ describe("ProjectDetail", () => {
         backlog?.click();
       });
 
-      const trigger = container.querySelector('button[aria-label="Change project status"]');
+      const trigger = statusTrigger();
       expect(trigger?.hasAttribute("disabled")).toBe(true);
       expect(container.querySelector('[data-testid="project-status-save-state"]')?.textContent)
         .toBe("saving");
+      // Optimistic flip: the chip shows the picked status while saving.
+      expect(trigger?.textContent).toContain("backlog");
 
       await act(async () => {
         rejectUpdate?.(new Error("network down"));
@@ -479,6 +529,8 @@ describe("ProjectDetail", () => {
 
       expect(container.querySelector('[data-testid="project-status-save-state"]')?.textContent)
         .toBe("error");
+      // The failure surfaces and the chip reverts to the persisted status.
+      expect(statusTrigger()?.textContent).toContain("in progress");
     });
   });
 });

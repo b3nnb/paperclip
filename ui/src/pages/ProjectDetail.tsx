@@ -342,7 +342,7 @@ function ProjectStatusPicker({
           type="button"
           disabled={disabled}
           className="inline-flex items-center gap-1 rounded-md hover:bg-accent/50 disabled:opacity-50"
-          aria-label="Change project status"
+          aria-label={`Change project status (current: ${status.replace(/[_-]/g, " ")})`}
         >
           <ProjectStatusBadge status={status} />
           <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
@@ -354,6 +354,7 @@ function ProjectStatusPicker({
             key={s}
             type="button"
             data-testid="project-status-option"
+            aria-current={s === status ? "true" : undefined}
             onClick={() => {
               setOpen(false);
               if (s !== status) onChange(s);
@@ -385,6 +386,7 @@ export function ProjectDetail() {
   const navigate = useNavigate();
   const location = useLocation();
   const [fieldSaveStates, setFieldSaveStates] = useState<Partial<Record<ProjectConfigFieldKey, ProjectFieldSaveState>>>({});
+  const [optimisticStatus, setOptimisticStatus] = useState<ProjectStatus | null>(null);
   const [dismissedLeftProjectIds, setDismissedLeftProjectIds] = useState<Set<string>>(() => new Set());
   const fieldSaveRequestIds = useRef<Partial<Record<ProjectConfigFieldKey, number>>>({});
   const fieldSaveTimers = useRef<Partial<Record<ProjectConfigFieldKey, ReturnType<typeof setTimeout>>>>({});
@@ -599,6 +601,16 @@ export function ProjectDetail() {
     };
   }, []);
 
+  // Optimistic chip value: after a pick, the chip shows the new status right
+  // away instead of lagging behind the refetch. Clear it once the refetched
+  // project confirms the value, and reset when navigating to another project.
+  useEffect(() => {
+    setOptimisticStatus((current) => (current !== null && project?.status === current ? null : current));
+  }, [project?.status]);
+  useEffect(() => {
+    setOptimisticStatus(null);
+  }, [project?.id]);
+
   const setFieldState = useCallback((field: ProjectConfigFieldKey, state: ProjectFieldSaveState) => {
     setFieldSaveStates((current) => ({ ...current, [field]: state }));
   }, []);
@@ -737,12 +749,16 @@ export function ProjectDetail() {
 
   // Status chip — rides the same per-field save machinery the configuration
   // tab uses, so the chip shows saving/saved/failed and failures surface
-  // instead of being silently ignored.
+  // instead of being silently ignored. The chip flips optimistically on pick
+  // and reverts on failure, so "Saved" never sits beside a stale value.
   const statusSaveState = fieldSaveStates["status"] ?? "idle";
+  const displayStatus = optimisticStatus ?? project.status;
   const handleStatusChange = (next: ProjectStatus) => {
+    setOptimisticStatus(next);
     updateProjectField("status", { status: next }).catch((error) => {
       // The SaveIndicator next to the chip already surfaces the failure to
-      // the user; log it so the rejection is never silently swallowed.
+      // the user; log it and revert the optimistic chip value.
+      setOptimisticStatus(null);
       console.error("Failed to update project status:", error);
     });
   };
@@ -823,7 +839,7 @@ export function ProjectDetail() {
               className="text-xl font-bold"
             />
             <ProjectStatusPicker
-              status={project.status}
+              status={displayStatus}
               disabled={statusSaveState === "saving"}
               onChange={handleStatusChange}
             />
