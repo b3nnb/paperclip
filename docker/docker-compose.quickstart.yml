@@ -42,3 +42,8 @@ services:
     volumes:
       # Persistent data directory (database, agent workspaces, uploads)
       - "${PAPERCLIP_DATA_DIR:-../data/docker-paperclip}:/paperclip"
+      # Host code checkouts (project workspaces) at the same path inside the
+      # container, so the control plane can realize isolated per-task git
+      # worktrees for enableIsolatedWorkspaces(ByDefault). Local deployment
+      # addition for the B Creations self-hosted instance (BCR-60).
+      - "/home/benn/Documents/code:/home/benn/Documents/code"
