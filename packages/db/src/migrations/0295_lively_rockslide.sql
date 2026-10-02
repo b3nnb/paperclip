@@ -1,0 +1,1 @@
+ALTER TABLE "projects" ADD COLUMN "zone" text DEFAULT 'a' NOT NULL;

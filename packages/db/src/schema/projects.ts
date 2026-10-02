@@ -13,6 +13,14 @@ export const projects = pgTable(
     name: text("name").notNull(),
     description: text("description"),
     status: text("status").notNull().default("backlog"),
+    /**
+     * Workflow zone for focus management: "b" is the single active lane a
+     * company works in at a time; "a" is parked (zero burn). The server
+     * enforces at most one zone-"b" project per company (see
+     * doc/plans/2026-10-02-zones.md). Text column mirroring `status`, with a
+     * server default so existing rows backfill to the parked zone.
+     */
+    zone: text("zone").notNull().default("a"),
     leadAgentId: uuid("lead_agent_id").references(() => agents.id),
     targetDate: date("target_date"),
     color: text("color"),

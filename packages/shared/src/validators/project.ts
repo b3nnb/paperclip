@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { PROJECT_STATUSES, PROJECT_ICON_NAMES } from "../constants.js";
+import { PROJECT_STATUSES, PROJECT_ICON_NAMES, PROJECT_ZONES } from "../constants.js";
 import { envConfigSchema } from "./secret.js";
 import { trustAuthorizationPolicySchema } from "./trust-policy.js";
 import { objectWithoutDefaults } from "./partial.js";
@@ -107,6 +107,10 @@ const projectFields = {
   name: z.string().min(1),
   description: z.string().optional().nullable(),
   status: z.enum(PROJECT_STATUSES).optional().default("backlog"),
+  // Focus zone: "b" = the single active lane per company, "a" = parked.
+  // Create defaults to "a"; the patch schema strips the default so an absent
+  // key on PATCH leaves the stored zone untouched.
+  zone: z.enum(PROJECT_ZONES).optional().default("a"),
   leadAgentId: z.string().guid().optional().nullable(),
   targetDate: z.string().optional().nullable(),
   color: z.string().optional().nullable(),

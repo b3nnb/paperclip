@@ -1,4 +1,4 @@
-import type { BudgetWindowKind, PauseReason, ProjectStatus } from "../constants.js";
+import type { BudgetWindowKind, PauseReason, ProjectStatus, ProjectZone } from "../constants.js";
 import type {
   ProjectExecutionWorkspacePolicy,
   ProjectWorkspaceRuntimeConfig,
@@ -86,6 +86,13 @@ export interface Project {
   name: string;
   description: string | null;
   status: ProjectStatus;
+  /**
+   * Focus zone: "b" is the single active lane per company, "a" is parked.
+   * The server always returns it (NOT NULL column, default "a"); it is typed
+   * optional so partial fixtures/mock payloads keep compiling. Treat absent
+   * as "a".
+   */
+  zone?: ProjectZone;
   leadAgentId: string | null;
   targetDate: string | null;
   color: string | null;

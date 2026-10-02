@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import {
   projects,
@@ -566,6 +566,25 @@ async function ensureSinglePrimaryWorkspace(
     );
 }
 
+/**
+ * Single-active-lane invariant for project zones: at most one zone-"b"
+ * project per company. Demotes every zone-"b" project in the company —
+ * except `excludeProjectId` — back to zone "a". Callers MUST run this
+ * inside the same transaction as the promote/insert so the two writes
+ * commit or roll back together; the invariant then never observes two
+ * zone-"b" rows.
+ */
+async function demoteOtherZoneBProjects(dbOrTx: any, companyId: string, excludeProjectId?: string) {
+  await dbOrTx
+    .update(projects)
+    .set({ zone: "a", updatedAt: new Date() })
+    .where(and(
+      eq(projects.companyId, companyId),
+      eq(projects.zone, "b"),
+      excludeProjectId ? ne(projects.id, excludeProjectId) : undefined,
+    ));
+}
+
 export function projectService(db: Db) {
   const createProject = async (
     companyId: string,
@@ -591,11 +610,21 @@ export function projectService(db: Db) {
     // together (goalIds wins resolution, mirroring the update path).
     const legacyGoalId = ids?.[0] ?? null;
 
-    const row = await db
-      .insert(projects)
-      .values({ ...projectData, goalId: legacyGoalId, companyId })
-      .returning()
-      .then((rows) => rows[0]);
+    const insertValues = { ...projectData, goalId: legacyGoalId, companyId };
+    // Creating directly in zone "b" takes over THE active lane: demote every
+    // other zone-"b" project in the company inside the same transaction, so
+    // the single-active-lane invariant holds from the moment of insert.
+    const row = projectData.zone === "b"
+      ? await db.transaction(async (tx) => {
+          await demoteOtherZoneBProjects(tx, companyId);
+          const [inserted] = await tx.insert(projects).values(insertValues).returning();
+          return inserted;
+        })
+      : await db
+          .insert(projects)
+          .values(insertValues)
+          .returning()
+          .then((rows) => rows[0]);
 
     if (ids && ids.length > 0) {
       await syncGoalLinks(db, row.id, companyId, ids);
@@ -898,12 +927,27 @@ export function projectService(db: Db) {
         updates.goalId = ids.length > 0 ? ids[0] : null;
       }
 
-      const row = await db
-        .update(projects)
-        .set(updates)
-        .where(eq(projects.id, id))
-        .returning()
-        .then((rows) => rows[0] ?? null);
+      // Promoting to zone "b" takes over THE active lane: demote every other
+      // zone-"b" project in the company inside the same transaction so the
+      // single-active-lane invariant holds atomically. Zone-less updates and
+      // self-demotions to zone "a" keep the cheap single-statement path.
+      const row =
+        updates.zone === "b"
+          ? await db.transaction(async (tx) => {
+              await demoteOtherZoneBProjects(tx, existingProject.companyId, id);
+              const [updated] = await tx
+                .update(projects)
+                .set(updates)
+                .where(eq(projects.id, id))
+                .returning();
+              return updated ?? null;
+            })
+          : await db
+              .update(projects)
+              .set(updates)
+              .where(eq(projects.id, id))
+              .returning()
+              .then((rows) => rows[0] ?? null);
       if (!row) return null;
 
       if (ids !== undefined) {

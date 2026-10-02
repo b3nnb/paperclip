@@ -574,6 +574,29 @@ export const PROJECT_STATUSES = [
 ] as const;
 export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
 
+/**
+ * Project focus zones. Zone "b" is THE one active lane a company works in at
+ * a time; zone "a" is parked ideas with zero burn. The platform enforces the
+ * single-active-lane invariant: promoting a project to zone "b" atomically
+ * demotes every other project in the same company back to zone "a".
+ *
+ * UI label strings live ONLY in `PROJECT_ZONE_LABELS` / `PROJECT_ZONE_HINTS`
+ * below, so renaming the feature ("lanes", "focus", …) stays a one-file edit.
+ */
+export const PROJECT_ZONES = ["a", "b"] as const;
+export type ProjectZone = (typeof PROJECT_ZONES)[number];
+
+export const PROJECT_ZONE_LABELS: Record<ProjectZone, string> = {
+  a: "Zone A",
+  b: "Zone B",
+};
+
+/** One-line explanation shown next to the label in pickers and headers. */
+export const PROJECT_ZONE_HINTS: Record<ProjectZone, string> = {
+  a: "Parked — zero burn",
+  b: "The active lane",
+};
+
 export const ENVIRONMENT_DRIVERS = ["local", "ssh", "sandbox", "plugin"] as const;
 export type EnvironmentDriver = (typeof ENVIRONMENT_DRIVERS)[number];
 
