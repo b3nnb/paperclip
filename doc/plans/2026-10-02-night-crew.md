@@ -17,15 +17,26 @@ Build: zone-scoped visibility filters across dashboard feeds, inbox, and notific
 
 ## 2. The Night Crew (agents that work the lot)
 
-Lot items are worked, not stored:
+Lot items are worked, not stored — the loop goes all the way to **first-run builds**:
 
 - **The Planner** (core agent, runs on local models — Strata/Qwen3.8-Flash-Next on Friday, qwen3.8:27b on the Mini):
   1. For each lot item: research the internet for knowledge (domain, parts, prior art, approaches, costs, what it would take).
   2. Learn what's needed; write a living **prep note** on the project (research findings accumulate).
   3. Formulate the questions only Benn can answer (choices, taste, constraints, clarity).
   4. Convert each question into an **answer-task** — a one-tap-answerable task type ("Which motor: A 12mm or B 25mm? 🅰/🅱") that sits in a "questions for you" area — visible ONLY when he opens it on purpose. Never pushed, never in the inbox, never in the DM.
-  5. **Re-evaluate loop**: after each pass — more research needed? more clarity needed? or ready? — keep prepping until the item is picked up or promoted.
-- **Builders** may also pick lot items for real work (drafts, prototypes, sketches) — stagnant is banned.
+  5. **Re-evaluate loop**: after each pass — more research needed? more clarity needed? or ready to BUILD? — and keep going until the item is picked up or promoted.
+- **Build beyond prep (Benn, Oct 2 evening)**: when the Planner judges there's ENOUGH INFO in the lot — prep note solid, blocking questions answered (or none exist) — the crew **builds**: scaffolding or a full first run at the project — all the files, models, docs, everything — inside the project's own isolated workspace (the existing isolated-worktree/provision machinery). Readiness is judged by the crew, not by Benn. The build result stays quiet in the lot like everything else; when he walks the lot, the item says "🚧 scaffold + first run built — look whenever."
+- **The guard is about ATTENTION, not compute.** Local-model night burn is welcome; what's banned is surfacing. (This supersedes the earlier "zone wake guards = zero burn" framing: burn yes, interruption never.)
+- **Builders** may also pick lot items for real work at any stage (drafts, prototypes, sketches) — stagnant is banned.
+
+## 2b. The Dashboard becomes the Focus surface (Benn, Oct 2 evening)
+
+The default Paperclip dashboard does nothing for Benn — it is repurposed as the **active-lane HQ**:
+
+- Front and center: THE zone-b project — today's one outcome, its next 1-3 steps, work in progress.
+- Live links resolve on the project: the linked Drafting Table room (embedded canvas for maker projects), build status, recent lane activity — nothing else.
+- Zero lot content, zero other projects, zero generic agent/metrics charts — the ops stats move to an ops surface (#infra / pipeline.bennbot.io) where the crew looks, not him.
+- One screen, one lane, one outcome — the board opens straight to it.
 
 ## 3. Promotion + pickup
 
