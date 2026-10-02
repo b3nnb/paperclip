@@ -586,4 +586,147 @@ describe("ProjectDetail", () => {
       expect(statusTrigger()?.textContent).toContain("in progress");
     });
   });
+
+  describe("project zone picker", () => {
+    function zoneOptions() {
+      return Array.from(container.querySelectorAll('[data-testid="project-zone-option"]'));
+    }
+    function findZoneOption(label: string): HTMLElement | null {
+      const match = zoneOptions().find((btn) => btn.textContent?.includes(label));
+      return match instanceof HTMLElement ? match : null;
+    }
+    function zoneTrigger(): HTMLElement | null {
+      return container.querySelector('button[aria-label^="Change project zone"]');
+    }
+    async function openZonePicker() {
+      const trigger = zoneTrigger();
+      expect(trigger).not.toBeNull();
+      await act(async () => {
+        trigger?.click();
+      });
+    }
+    async function renderDetail() {
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      await act(async () => {
+        root = createRoot(container);
+        root.render(
+          <QueryClientProvider client={queryClient}>
+            <ProjectDetail />
+          </QueryClientProvider>,
+        );
+      });
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+    }
+    async function flush() {
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+    }
+
+    it("renders the zone chip next to the status chip and keeps options hidden until tapped", async () => {
+      await renderDetail();
+
+      const trigger = zoneTrigger();
+      expect(trigger).not.toBeNull();
+      // Legacy rows without a zone park in zone "a" (the DB default).
+      expect(trigger?.textContent).toContain("Zone A");
+      expect(trigger?.getAttribute("aria-label")).toBe("Change project zone (current: Zone A)");
+      expect(zoneOptions()).toHaveLength(0);
+      // The zone chip sits in the header row with the status chip.
+      const statusPicker = container.querySelector('button[aria-label^="Change project status"]');
+      expect(statusPicker && trigger
+        ? Boolean(statusPicker.compareDocumentPosition(trigger) & Node.DOCUMENT_POSITION_FOLLOWING)
+        : false).toBe(true);
+    });
+
+    it("lists the two zones with their hints and marks the current one", async () => {
+      await renderDetail();
+      await openZonePicker();
+
+      expect(zoneOptions()).toHaveLength(2);
+      const current = zoneOptions().find((btn) => btn.getAttribute("aria-current") === "true");
+      expect(current?.textContent).toContain("Zone A");
+      expect(current?.textContent).toContain("Parked — zero burn");
+      const other = zoneOptions().find((btn) => btn.getAttribute("aria-current") !== "true");
+      expect(other?.textContent).toContain("Zone B");
+      expect(other?.textContent).toContain("The active lane");
+    });
+
+    it("promotes the project to zone b via PATCH, closes the picker, and refreshes the chip", async () => {
+      mockProjectsApi.update.mockResolvedValue(project({ zone: "b" }));
+      await renderDetail();
+      // After the initial load, the refetch returns the persisted project.
+      mockProjectsApi.get.mockResolvedValue(project({ zone: "b" }));
+      await openZonePicker();
+
+      const zoneB = findZoneOption("Zone B");
+      expect(zoneB).not.toBeNull();
+      await act(async () => {
+        zoneB?.click();
+      });
+      // The picker closes on selection.
+      expect(zoneOptions()).toHaveLength(0);
+      await flush();
+
+      expect(mockProjectsApi.update).toHaveBeenCalledWith(
+        "project-1",
+        { zone: "b" },
+        "company-1",
+      );
+      expect(mockProjectsApi.get.mock.calls.length).toBeGreaterThan(1);
+      // The chip reads the refreshed zone, not the optimistic value.
+      expect(zoneTrigger()?.textContent).toContain("Zone B");
+    });
+
+    it("does not PATCH when the current zone is picked again", async () => {
+      await renderDetail();
+      await openZonePicker();
+
+      const current = findZoneOption("Zone A");
+      expect(current).not.toBeNull();
+      await act(async () => {
+        current?.click();
+      });
+      await flush();
+
+      expect(mockProjectsApi.update).not.toHaveBeenCalled();
+    });
+
+    it("disables the chip while saving and reverts the chip on a failed save", async () => {
+      let rejectUpdate: ((reason: Error) => void) | null = null;
+      mockProjectsApi.update.mockImplementation(
+        () => new Promise<Project>((_, reject) => { rejectUpdate = reject; }),
+      );
+      await renderDetail();
+      await openZonePicker();
+
+      const zoneB = findZoneOption("Zone B");
+      expect(zoneB).not.toBeNull();
+      await act(async () => {
+        zoneB?.click();
+      });
+
+      const trigger = zoneTrigger();
+      expect(trigger?.hasAttribute("disabled")).toBe(true);
+      expect(container.querySelector('[data-testid="project-status-save-state"]')?.textContent)
+        .toBe("saving");
+      // Optimistic flip: the chip shows the picked zone while saving.
+      expect(trigger?.textContent).toContain("Zone B");
+
+      await act(async () => {
+        rejectUpdate?.(new Error("network down"));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      expect(container.querySelector('[data-testid="project-status-save-state"]')?.textContent)
+        .toBe("error");
+      // The failure surfaces and the chip reverts to the persisted zone.
+      expect(zoneTrigger()?.textContent).toContain("Zone A");
+    });
+  });
 });

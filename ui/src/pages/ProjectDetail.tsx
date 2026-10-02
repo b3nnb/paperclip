@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { Link, useParams, useNavigate, useLocation, Navigate } from "@/lib/router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { PROJECT_COLORS, PROJECT_ICON_NAMES, PROJECT_STATUSES, isUuidLike, type BudgetPolicySummary, type ProjectStatus } from "@paperclipai/shared";
+import { PROJECT_COLORS, PROJECT_ICON_NAMES, PROJECT_STATUSES, isUuidLike, type BudgetPolicySummary, type ProjectStatus, type ProjectZone } from "@paperclipai/shared";
 import { budgetsApi } from "../api/budgets";
 import { executionWorkspacesApi } from "../api/execution-workspaces";
 import { instanceSettingsApi } from "../api/instanceSettings";
@@ -18,6 +18,7 @@ import { queryKeys } from "../lib/queryKeys";
 import { ProjectProperties, SaveIndicator, type ProjectConfigFieldKey, type ProjectFieldSaveState } from "../components/ProjectProperties";
 import { InlineEditor } from "../components/InlineEditor";
 import { ProjectStatusBadge } from "../components/StatusBadge";
+import { ProjectZonePicker } from "../components/ProjectZonePicker";
 import { Check, ChevronDown } from "lucide-react";
 import { ProjectTile } from "../components/ProjectTile";
 import { BudgetPolicyCard } from "../components/BudgetPolicyCard";
@@ -387,6 +388,7 @@ export function ProjectDetail() {
   const location = useLocation();
   const [fieldSaveStates, setFieldSaveStates] = useState<Partial<Record<ProjectConfigFieldKey, ProjectFieldSaveState>>>({});
   const [optimisticStatus, setOptimisticStatus] = useState<ProjectStatus | null>(null);
+  const [optimisticZone, setOptimisticZone] = useState<ProjectZone | null>(null);
   const [dismissedLeftProjectIds, setDismissedLeftProjectIds] = useState<Set<string>>(() => new Set());
   const fieldSaveRequestIds = useRef<Partial<Record<ProjectConfigFieldKey, number>>>({});
   const fieldSaveTimers = useRef<Partial<Record<ProjectConfigFieldKey, ReturnType<typeof setTimeout>>>>({});
@@ -616,6 +618,12 @@ export function ProjectDetail() {
   useEffect(() => {
     setOptimisticStatus(null);
   }, [project?.status]);
+  // Same contract as the status chip: a fresh zone arriving from the server —
+  // including one changed by another operator's PATCH — drops the optimistic
+  // value so the zone chip always reflects the current project state.
+  useEffect(() => {
+    setOptimisticZone(null);
+  }, [project?.zone]);
   // Navigating to another project must not carry the status chip's save
   // feedback across: supersede any in-flight status save so its late
   // resolution is ignored, drop its reset timer, and clear the indicator.
@@ -628,9 +636,23 @@ export function ProjectDetail() {
     }
     setOptimisticStatus(null);
     setFieldSaveStates((current) => {
-      if (!("status" in current)) return current;
+      if (!(("status" in current))) return current;
       const next = { ...current };
       delete next.status;
+      return next;
+    });
+    // …and the same for the zone chip riding next to it.
+    fieldSaveRequestIds.current["zone"] = (fieldSaveRequestIds.current["zone"] ?? 0) + 1;
+    const zoneTimer = fieldSaveTimers.current["zone"];
+    if (zoneTimer) {
+      clearTimeout(zoneTimer);
+      delete fieldSaveTimers.current["zone"];
+    }
+    setOptimisticZone(null);
+    setFieldSaveStates((current) => {
+      if (!("zone" in current)) return current;
+      const next = { ...current };
+      delete next.zone;
       return next;
     });
   }, [project?.id]);
@@ -787,6 +809,21 @@ export function ProjectDetail() {
     });
   };
 
+  // Zone chip — same optimistic contract as the status chip. Promoting to
+  // zone "b" (the active lane) demotes every other project in the company
+  // back to zone "a" atomically on the server; the refetch brings that home.
+  const zoneSaveState = fieldSaveStates["zone"] ?? "idle";
+  const displayZone = optimisticZone ?? project.zone ?? "a";
+  const handleZoneChange = (next: ProjectZone) => {
+    setOptimisticZone(next);
+    updateProjectField("zone", { zone: next }).catch((error) => {
+      // The SaveIndicator next to the chip already surfaces the failure to
+      // the user; log it and revert the optimistic chip value.
+      setOptimisticZone(null);
+      console.error("Failed to update project zone:", error);
+    });
+  };
+
   const handleTabChange = (tab: ProjectTab) => {
     // Cache the active tab per project
     if (project?.id) {
@@ -868,6 +905,12 @@ export function ProjectDetail() {
               onChange={handleStatusChange}
             />
             <SaveIndicator state={statusSaveState} />
+            <ProjectZonePicker
+              zone={displayZone}
+              disabled={zoneSaveState === "saving"}
+              onChange={handleZoneChange}
+            />
+            <SaveIndicator state={zoneSaveState} />
           </div>
           {project.pauseReason === "budget" ? (
             <div className="inline-flex items-center gap-2 rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-(length:--text-micro) font-medium uppercase tracking-(--tracking-caps) text-red-800 dark:text-red-200">

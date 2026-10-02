@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import type { Project } from "@paperclipai/shared";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { Project, ProjectZone } from "@paperclipai/shared";
+import { PROJECT_ZONE_HINTS, PROJECT_ZONE_LABELS } from "@paperclipai/shared";
 import { projectsApi } from "../api/projects";
 import { useCompany } from "../context/CompanyContext";
 import { useDialogActions } from "../context/DialogContext";
@@ -9,6 +10,7 @@ import { queryKeys } from "../lib/queryKeys";
 import { EntityRow } from "../components/EntityRow";
 import { ProjectTile } from "../components/ProjectTile";
 import { ProjectStatusBadge } from "../components/StatusBadge";
+import { ProjectZonePicker } from "../components/ProjectZonePicker";
 import { MembershipAction } from "../components/MembershipAction";
 import { StarToggle } from "../components/StarToggle";
 import { EmptyState } from "../components/EmptyState";
@@ -34,6 +36,19 @@ const PROJECT_SORT_OPTIONS: Array<{ field: ProjectSortField; label: string }> = 
   { field: "created", label: "Created" },
   { field: "targetDate", label: "Target date" },
 ];
+
+// Zone-grouped section titles, composed from the shared zone constants so a
+// rename ("lanes", "focus", …) stays a one-file edit in @paperclipai/shared.
+// Zone B — the one active lane — renders FIRST; Zone A (parked) follows.
+// Projects left by the current operator keep their own trailing section.
+const ZONE_B_SECTION_TITLE = `${PROJECT_ZONE_LABELS.b} (${PROJECT_ZONE_HINTS.b})`;
+const ZONE_A_SECTION_TITLE = `${PROJECT_ZONE_LABELS.a} (${PROJECT_ZONE_HINTS.a})`;
+const LEFT_SECTION_TITLE = "Other Projects";
+
+/** Effective zone: legacy/undefined rows park in zone "a" (the DB default). */
+function projectZone(project: Project): ProjectZone {
+  return project.zone === "b" ? "b" : "a";
+}
 
 function compareProjectNames(left: Project, right: Project) {
   const nameDiff = left.name.localeCompare(right.name, undefined, { sensitivity: "base" });
@@ -80,6 +95,7 @@ export function Projects() {
   const { selectedCompanyId } = useCompany();
   const { openNewProject } = useDialogActions();
   const { setBreadcrumbs } = useBreadcrumbs();
+  const queryClient = useQueryClient();
   const [sortField, setSortField] = useState<ProjectSortField>("name");
   const [sortDir, setSortDir] = useState<ProjectSortDir>("asc");
 
@@ -94,6 +110,21 @@ export function Projects() {
   });
   const membershipsQuery = useResourceMemberships(selectedCompanyId);
   const membershipMutation = useResourceMembershipMutation(selectedCompanyId);
+  // Zone changes from the card picker: PATCH the project, then refresh the
+  // list so the one-active-lane grouping (and any server-side demotions of
+  // the previous zone-b project) lands immediately.
+  const updateZoneMutation = useMutation({
+    mutationFn: ({ project, zone }: { project: Project; zone: ProjectZone }) =>
+      projectsApi.update(project.id, { zone }, selectedCompanyId!),
+    onSuccess: () => {
+      if (selectedCompanyId) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.projects.list(selectedCompanyId) });
+      }
+    },
+    onError: (error) => {
+      console.error("Failed to update project zone:", error);
+    },
+  });
   const projects = useMemo(
     () => allProjects ?? [],
     [allProjects],
@@ -104,14 +135,16 @@ export function Projects() {
   );
   const groupedProjects = useMemo(() => {
     const groups = {
-      mine: [] as typeof sortedProjects,
-      other: [] as typeof sortedProjects,
+      zoneB: [] as typeof sortedProjects,
+      zoneA: [] as typeof sortedProjects,
+      left: [] as typeof sortedProjects,
     };
 
     for (const project of sortedProjects) {
       const state = resourceMembershipState(membershipsQuery.data, "project", project.id);
-      if (state === "left") groups.other.push(project);
-      else groups.mine.push(project);
+      if (state === "left") groups.left.push(project);
+      else if (projectZone(project) === "b") groups.zoneB.push(project);
+      else groups.zoneA.push(project);
     }
 
     return groups;
@@ -188,8 +221,9 @@ export function Projects() {
       {projects.length > 0 && (
         <div className="space-y-6">
           {([
-            ["My Projects", groupedProjects.mine],
-            ["Other Projects", groupedProjects.other],
+            [ZONE_B_SECTION_TITLE, groupedProjects.zoneB],
+            [ZONE_A_SECTION_TITLE, groupedProjects.zoneA],
+            [LEFT_SECTION_TITLE, groupedProjects.left],
           ] as const).map(([label, sectionProjects]) => {
             if (sectionProjects.length === 0) return null;
 
@@ -237,6 +271,25 @@ export function Projects() {
                                 {formatDate(project.targetDate)}
                               </span>
                             )}
+                            {/* Zone picker — the trailing zone badge is its
+                                trigger; the wrapper stops the click so the
+                                row link does not navigate. */}
+                            <span
+                              className="inline-flex"
+                              onClick={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                              }}
+                            >
+                              <ProjectZonePicker
+                                zone={projectZone(project)}
+                                disabled={
+                                  updateZoneMutation.isPending &&
+                                  updateZoneMutation.variables?.project.id === project.id
+                                }
+                                onChange={(next) => updateZoneMutation.mutate({ project, zone: next })}
+                              />
+                            </span>
                             <ProjectStatusBadge status={project.status} />
                             <MembershipAction
                               state={state}

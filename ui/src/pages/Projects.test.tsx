@@ -5,12 +5,14 @@ import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { Project } from "@paperclipai/shared";
+import { PROJECT_ZONE_HINTS, PROJECT_ZONE_LABELS } from "@paperclipai/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "../context/ToastContext";
 import { Projects } from "./Projects";
 
 const mockProjectsApi = vi.hoisted(() => ({
   list: vi.fn(),
+  update: vi.fn(),
 }));
 
 const mockResourceMembershipsApi = vi.hoisted(() => ({
@@ -126,7 +128,15 @@ describe("Projects", () => {
         id: "project-c",
         urlKey: "charlie",
         name: "Charlie",
+        zone: "b",
         updatedAt: new Date("2026-01-10T00:00:00Z"),
+      }),
+      makeProject({
+        id: "project-d",
+        urlKey: "delta",
+        name: "Delta",
+        zone: "b",
+        updatedAt: new Date("2026-01-12T00:00:00Z"),
       }),
       makeProject({
         id: "project-b",
@@ -142,6 +152,7 @@ describe("Projects", () => {
         updatedAt: new Date("2026-01-01T00:00:00Z"),
       }),
     ]);
+    mockProjectsApi.update.mockResolvedValue({});
     mockResourceMembershipsApi.listMine.mockResolvedValue({
       projectMemberships: { "project-b": "left" },
       agentMemberships: {},
@@ -207,27 +218,73 @@ describe("Projects", () => {
     await flushReact();
   }
 
-  it("groups joined projects above left projects and defaults sorting by name", async () => {
+  // Section titles mirror the constants-derived composition in Projects.tsx.
+  const zoneBTitle = `${PROJECT_ZONE_LABELS.b} (${PROJECT_ZONE_HINTS.b})`;
+  const zoneATitle = `${PROJECT_ZONE_LABELS.a} (${PROJECT_ZONE_HINTS.a})`;
+  const leftTitle = "Other Projects";
+
+  it("groups the active lane (zone B) above parked (zone A) and left projects, sorting by name", async () => {
     await renderProjects();
 
     const content = container.textContent ?? "";
     expect(container.querySelector('button[title="Sort"]')?.textContent).toContain("Sort: Name");
-    expect(content.indexOf("My Projects")).toBeLessThan(content.indexOf("Alpha"));
-    expect(content.indexOf("Alpha")).toBeLessThan(content.indexOf("Charlie"));
-    expect(content.indexOf("Charlie")).toBeLessThan(content.indexOf("Other Projects"));
-    expect(content.indexOf("Other Projects")).toBeLessThan(content.indexOf("Bravo"));
+    expect(content.indexOf(zoneBTitle)).toBeLessThan(content.indexOf("Charlie"));
+    expect(content.indexOf("Charlie")).toBeLessThan(content.indexOf("Delta"));
+    expect(content.indexOf("Delta")).toBeLessThan(content.indexOf(zoneATitle));
+    expect(content.indexOf(zoneATitle)).toBeLessThan(content.indexOf("Alpha"));
+    expect(content.indexOf("Alpha")).toBeLessThan(content.indexOf(leftTitle));
+    expect(content.indexOf(leftTitle)).toBeLessThan(content.indexOf("Bravo"));
     expect(content).toContain("in progress");
+    // Zone chips render on the cards via the picker triggers.
+    expect(content).toContain("Zone B");
+    expect(content).toContain("Zone A");
   });
 
-  it("sorts grouped projects by the selected field", async () => {
+  it("sorts zone-grouped projects by the selected field", async () => {
     await renderProjects();
     await openSortMenu();
     await chooseSortField("Updated");
 
     const content = container.textContent ?? "";
-    expect(content.indexOf("My Projects")).toBeLessThan(content.indexOf("Charlie"));
-    expect(content.indexOf("Charlie")).toBeLessThan(content.indexOf("Alpha"));
-    expect(content.indexOf("Alpha")).toBeLessThan(content.indexOf("Other Projects"));
+    expect(content.indexOf(zoneBTitle)).toBeLessThan(content.indexOf("Delta"));
+    expect(content.indexOf("Delta")).toBeLessThan(content.indexOf("Charlie"));
+    expect(content.indexOf("Charlie")).toBeLessThan(content.indexOf(zoneATitle));
+    expect(content.indexOf(zoneATitle)).toBeLessThan(content.indexOf("Alpha"));
+  });
+
+  it("promotes a card to zone B from the trailing zone picker", async () => {
+    await renderProjects();
+
+    // Alpha is the zone A (parked) card; open its trailing zone picker.
+    const alphaRow = Array.from(container.querySelectorAll("a")).find((link) =>
+      link.textContent?.includes("Alpha"),
+    );
+    const trigger = alphaRow?.querySelector<HTMLButtonElement>('button[aria-label^="Change project zone"]');
+    expect(trigger?.getAttribute("aria-label")).toBe("Change project zone (current: Zone A)");
+    const listCallsBefore = mockProjectsApi.list.mock.calls.length;
+
+    await act(async () => {
+      trigger?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }));
+      trigger?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushReact();
+
+    const zoneBOption = Array.from(document.body.querySelectorAll('[data-testid="project-zone-option"]'))
+      .find((element) => element.textContent?.includes("Zone B"));
+    expect(zoneBOption).toBeTruthy();
+
+    await act(async () => {
+      zoneBOption?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushReact();
+
+    expect(mockProjectsApi.update).toHaveBeenCalledWith(
+      "project-a",
+      { zone: "b" },
+      "company-1",
+    );
+    // The list refetches so the one-active-lane grouping lands.
+    expect(mockProjectsApi.list.mock.calls.length).toBeGreaterThan(listCallsBefore);
   });
 
   it("reserves description line height for projects without descriptions", async () => {

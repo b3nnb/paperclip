@@ -5,7 +5,7 @@
  * agent status dots, etc.) should import from here so colors stay consistent.
  */
 
-import type { ProjectStatus } from "@paperclipai/shared";
+import type { ProjectStatus, ProjectZone } from "@paperclipai/shared";
 
 // ---------------------------------------------------------------------------
 // Issue status colors
@@ -158,6 +158,22 @@ export const projectStatusBadge: Record<ProjectStatus, string> = {
   in_progress: `border ${brandChipBadge.blue}`,
   completed: `border ${brandChipBadge.green}`,
   cancelled: `border ${brandChipBadge.red}`,
+};
+
+// ---------------------------------------------------------------------------
+// Project zone colors
+//
+// Projects carry a focus zone (V1 zones): zone "b" is THE one active lane a
+// company works in at a time; zone "a" is parked ideas with zero burn. Chips
+// reuse the brand chip families — parked rides the inert gray family, the
+// active lane rides the liveness blue — so zones read as chip states, not a
+// new palette. Labels/hints live in `PROJECT_ZONE_LABELS` /
+// `PROJECT_ZONE_HINTS` (@paperclipai/shared), never inline.
+// ---------------------------------------------------------------------------
+
+export const projectZoneBadge: Record<ProjectZone, string> = {
+  a: `border ${brandChipBadge.gray}`,
+  b: `border ${brandChipBadge.blue}`,
 };
 
 // ---------------------------------------------------------------------------

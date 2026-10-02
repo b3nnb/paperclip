@@ -38,6 +38,7 @@ export type ProjectConfigFieldKey =
   | "name"
   | "description"
   | "status"
+  | "zone"
   | "goals"
   | "env"
   | "execution_workspace_enabled"
