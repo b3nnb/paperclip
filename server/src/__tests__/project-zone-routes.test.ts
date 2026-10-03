@@ -95,6 +95,14 @@ describeEmbeddedPostgres("project zone routes", () => {
     return row?.zone;
   }
 
+  async function readLotState(projectId: string): Promise<string | null | undefined> {
+    const [row] = await db
+      .select({ lot_state: projects.lot_state })
+      .from(projects)
+      .where(eq(projects.id, projectId));
+    return row?.lot_state;
+  }
+
   it("creates projects in zone a by default", async () => {
     const companyId = await seedCompany("Default zone co");
     const app = createApp(db, boardActor([companyId]));
@@ -170,5 +178,56 @@ describeEmbeddedPostgres("project zone routes", () => {
     expect(await readZone(aOtherId)).toBe("b");
     expect(await readZone(aActiveId)).toBe("a");
     expect(await readZone(bActiveId)).toBe("b");
+  });
+
+  it("creates projects with an untouched (null) lot state", async () => {
+    const companyId = await seedCompany("Default lot co");
+    const app = createApp(db, boardActor([companyId]));
+
+    const res = await request(app).post(`/api/companies/${companyId}/projects`).send({ name: "Fresh lot idea" });
+
+    expect(res.status).toBe(201);
+    expect(res.body.lot_state).toBeNull();
+    expect(await readLotState(res.body.id)).toBeNull();
+  });
+
+  it("sets the night-crew lot state via PATCH and round-trips it", async () => {
+    const companyId = await seedCompany("Lot ready co");
+    const projectId = await seedProject(companyId, "Worked idea");
+    const app = createApp(db, boardActor([companyId]));
+
+    const res = await request(app).patch(`/api/projects/${projectId}`).send({ lot_state: "ready" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.lot_state).toBe("ready");
+    expect(await readLotState(projectId)).toBe("ready");
+  });
+
+  it("clears the lot state with an explicit null PATCH", async () => {
+    const companyId = await seedCompany("Lot clear co");
+    const projectId = await seedProject(companyId, "Cleared idea");
+    const app = createApp(db, boardActor([companyId]));
+
+    const set = await request(app).patch(`/api/projects/${projectId}`).send({ lot_state: "built" });
+    expect(set.status).toBe(200);
+    expect(await readLotState(projectId)).toBe("built");
+
+    const clear = await request(app).patch(`/api/projects/${projectId}`).send({ lot_state: null });
+
+    expect(clear.status).toBe(200);
+    expect(clear.body.lot_state).toBeNull();
+    expect(await readLotState(projectId)).toBeNull();
+  });
+
+  it("rejects an invalid lot state with 400 and leaves the column null", async () => {
+    const companyId = await seedCompany("Invalid lot co");
+    const projectId = await seedProject(companyId, "Bad lot input");
+    const app = createApp(db, boardActor([companyId]));
+
+    const res = await request(app).patch(`/api/projects/${projectId}`).send({ lot_state: "wat" });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("Validation error");
+    expect(await readLotState(projectId)).toBeNull();
   });
 });

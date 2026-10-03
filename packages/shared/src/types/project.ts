@@ -1,4 +1,4 @@
-import type { BudgetWindowKind, PauseReason, ProjectStatus, ProjectZone } from "../constants.js";
+import type { BudgetWindowKind, PauseReason, ProjectLotState, ProjectStatus, ProjectZone } from "../constants.js";
 import type {
   ProjectExecutionWorkspacePolicy,
   ProjectWorkspaceRuntimeConfig,
@@ -93,6 +93,14 @@ export interface Project {
    * as "a".
    */
   zone?: ProjectZone;
+  /**
+   * Night-crew lot state (doc/plans/2026-10-02-night-crew.md): how far the
+   * crew has worked this parked idea. The column is nullable with NO
+   * default, so NULL/absent = untouched (never backfilled); the server
+   * returns null, not a stand-in state. Typed optional so partial
+   * fixtures/mock payloads keep compiling.
+   */
+  lot_state?: ProjectLotState | null;
   leadAgentId: string | null;
   targetDate: string | null;
   color: string | null;

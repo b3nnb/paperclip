@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { PROJECT_STATUSES, PROJECT_ICON_NAMES, PROJECT_ZONES } from "../constants.js";
+import { PROJECT_STATUSES, PROJECT_ICON_NAMES, PROJECT_ZONES, LOT_STATES } from "../constants.js";
 import { envConfigSchema } from "./secret.js";
 import { trustAuthorizationPolicySchema } from "./trust-policy.js";
 import { objectWithoutDefaults } from "./partial.js";
@@ -111,6 +111,10 @@ const projectFields = {
   // Create defaults to "a"; the patch schema strips the default so an absent
   // key on PATCH leaves the stored zone untouched.
   zone: z.enum(PROJECT_ZONES).optional().default("a"),
+  // Night-crew lot state: optional enum with NO default (unlike zone) — an
+  // absent key on create AND patch leaves the stored value untouched, and
+  // an explicit null clears it back to "untouched".
+  lot_state: z.enum(LOT_STATES).optional().nullable(),
   leadAgentId: z.string().guid().optional().nullable(),
   targetDate: z.string().optional().nullable(),
   color: z.string().optional().nullable(),

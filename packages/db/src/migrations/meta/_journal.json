@@ -2059,6 +2059,13 @@
       "when": 1790972521968,
       "tag": "0295_lively_rockslide",
       "breakpoints": true
+    },
+    {
+      "idx": 296,
+      "version": "7",
+      "when": 1790986621640,
+      "tag": "0296_whole_pestilence",
+      "breakpoints": true
     }
   ]
 }

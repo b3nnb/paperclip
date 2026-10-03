@@ -21,6 +21,15 @@ export const projects = pgTable(
      * server default so existing rows backfill to the parked zone.
      */
     zone: text("zone").notNull().default("a"),
+    /**
+     * Night-crew lot state for a parked (zone-"a") project: how far the
+     * crew has worked the idea — "prepping" | "questions" | "ready" |
+     * "built" (see doc/plans/2026-10-02-night-crew.md). NULL means
+     * untouched — nothing has picked the item up yet. Mirrors the `zone`
+     * column pattern (text, no DB enum) but is nullable with NO default,
+     * so existing rows stay NULL instead of backfilling.
+     */
+    lot_state: text("lot_state"),
     leadAgentId: uuid("lead_agent_id").references(() => agents.id),
     targetDate: date("target_date"),
     color: text("color"),

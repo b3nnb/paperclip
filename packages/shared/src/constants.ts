@@ -597,6 +597,26 @@ export const PROJECT_ZONE_HINTS: Record<ProjectZone, string> = {
   b: "The active lane",
 };
 
+/**
+ * Night-crew lot states (see doc/plans/2026-10-02-night-crew.md): how far
+ * the crew has worked a parked (zone-"a") idea. NULL/absent means untouched
+ * — nothing has picked the item up yet. Set by the night-crew agents, never
+ * pushed at the operator: lot content stays invisible until he walks the
+ * lot on purpose.
+ *
+ * UI label strings live ONLY in `LOT_STATE_LABELS` below, mirroring the
+ * zone-constants convention so renaming stays a one-file edit.
+ */
+export const LOT_STATES = ["prepping", "questions", "ready", "built"] as const;
+export type ProjectLotState = (typeof LOT_STATES)[number];
+
+export const LOT_STATE_LABELS: Record<ProjectLotState, string> = {
+  prepping: "⏳ Prepping",
+  questions: "❓ Questions for you",
+  ready: "✅ Ready",
+  built: "🚧 First run built",
+};
+
 export const ENVIRONMENT_DRIVERS = ["local", "ssh", "sandbox", "plugin"] as const;
 export type EnvironmentDriver = (typeof ENVIRONMENT_DRIVERS)[number];
 
