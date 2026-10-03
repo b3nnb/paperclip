@@ -12,7 +12,7 @@ import {
   issues,
   issueThreadInteractions,
 } from "@paperclipai/db";
-import { executionIssueCondition } from "./issue-visibility.js";
+import { executionIssueCondition, lotProjectIssueCondition } from "./issue-visibility.js";
 
 // DTO types are shared with the UI via @paperclipai/shared so both sides consume
 // one contract. Re-exported here for back-compat with existing server imports.
@@ -205,9 +205,14 @@ export function workTimelineService(db: Db) {
       ids.add(input.issueId);
     }
 
+    // Lot contract: a deliberately scoped timeline (a project or a single
+    // issue) still walks the lot; an unscoped company timeline never does.
+    const deliberatelyScoped = Boolean(input.projectId || input.issueId);
+
     const filterConditions = [
       eq(issues.companyId, input.companyId),
       executionIssueCondition(),
+      deliberatelyScoped ? undefined : lotProjectIssueCondition(),
       input.goalId ? eq(issues.goalId, input.goalId) : undefined,
       input.projectId ? eq(issues.projectId, input.projectId) : undefined,
       input.issueId ? eq(issues.id, input.issueId) : undefined,
@@ -313,6 +318,8 @@ export function workTimelineService(db: Db) {
 
   async function loadIssues(input: WorkTimelineQuery, issueIds: string[]) {
     if (issueIds.length === 0) return [];
+    // Lot contract mirrors collectIssueIds: deliberate scopes walk the lot.
+    const deliberatelyScoped = Boolean(input.projectId || input.issueId);
     return db
       .select({
         id: issues.id,
@@ -334,6 +341,7 @@ export function workTimelineService(db: Db) {
         and(
           eq(issues.companyId, input.companyId),
           executionIssueCondition(),
+          deliberatelyScoped ? undefined : lotProjectIssueCondition(),
           inArray(issues.id, issueIds),
           input.goalId ? eq(issues.goalId, input.goalId) : undefined,
           input.projectId ? eq(issues.projectId, input.projectId) : undefined,

@@ -1,9 +1,9 @@
 import { and, eq, gte, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
-import { agents, approvals, companies, costEvents, heartbeatRuns, issues } from "@paperclipai/db";
+import { agents, approvals, companies, costEvents, heartbeatRuns, issues, projects } from "@paperclipai/db";
 import { notFound } from "../errors.js";
 import { budgetService } from "./budgets.js";
-import { executionIssueCondition } from "./issue-visibility.js";
+import { executionIssueCondition, lotProjectIssueCondition } from "./issue-visibility.js";
 import { retryIdempotentDatabaseOperation } from "../database-retry.js";
 
 const DASHBOARD_RUN_ACTIVITY_DAYS = 14;
@@ -47,7 +47,12 @@ export function dashboardService(db: Db) {
       const taskRows = await retryIdempotentDatabaseOperation(() => db
         .select({ status: issues.status, count: sql<number>`count(*)` })
         .from(issues)
-        .where(and(eq(issues.companyId, companyId), executionIssueCondition()))
+        .where(and(
+          eq(issues.companyId, companyId),
+          executionIssueCondition(),
+          // Lot contract: lot-project tasks never count toward the dashboard.
+          lotProjectIssueCondition(),
+        ))
         .groupBy(issues.status));
 
       const pendingApprovals = await retryIdempotentDatabaseOperation(() => db
@@ -133,6 +138,13 @@ export function dashboardService(db: Db) {
         FROM ${heartbeatRuns} AS run
         WHERE run.company_id = ${companyId}
           AND run.created_at >= ${runActivityStart.toISOString()}::timestamptz
+          AND NOT EXISTS (
+            SELECT 1
+            FROM ${issues} lot_issue
+            JOIN ${projects} lot_project ON lot_project.id = lot_issue.project_id
+            WHERE lot_issue.id::text = (run.context_snapshot ->> 'issueId')
+              AND lot_project.zone = 'a'
+          )
         GROUP BY date, run.status, run.error_code, recovered
       `)) as unknown as Iterable<{
         date: string;

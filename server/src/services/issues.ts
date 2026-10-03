@@ -184,7 +184,7 @@ import {
   type IssueGraphLivenessInput,
   type IssueLivenessFinding,
 } from "./recovery/issue-graph-liveness.js";
-import { visibleIssueCondition } from "./issue-visibility.js";
+import { lotProjectIssueCondition, visibleIssueCondition } from "./issue-visibility.js";
 import { finalizeStatusCardsForStalledGeneration } from "./status-card-finalization.js";
 import { finalizeSummarySlotsForTerminalIssue } from "./summary-slot-finalization.js";
 import {
@@ -6181,6 +6181,31 @@ function assertValidAssigneeAgentFilter(
   }
 }
 
+/**
+ * Night-crew lot contract (doc/plans/2026-10-02-night-crew.md §1): a
+ * company-wide (unscoped) issue list omits issues parked in zone-"a" (lot)
+ * projects — the lot is invisible on attention surfaces, enforced
+ * server-side. Deliberately scoped queries — a project walk, a parent or
+ * descendant, a created-from, a workspace, an origin, a text search, an
+ * agent assignee/participant crew — keep lot issues visible so "walk the
+ * lot" and agent-crew views keep working. Execution paths never call this.
+ */
+function lotIssueVisibilityCondition(filters?: IssueFilters): SQL | undefined {
+  const deliberatelyScoped = Boolean(
+    filters?.projectId ||
+      filters?.parentId ||
+      filters?.descendantOf ||
+      filters?.createdFromIssueId ||
+      filters?.workspaceId ||
+      filters?.executionWorkspaceId ||
+      filters?.originId ||
+      filters?.q?.trim() ||
+      filters?.assigneeAgentId !== undefined ||
+      filters?.participantAgentId,
+  );
+  return deliberatelyScoped ? undefined : lotProjectIssueCondition();
+}
+
 async function blockedInboxIssueConditions(
   dbOrTx: any,
   companyId: string,
@@ -6191,6 +6216,8 @@ async function blockedInboxIssueConditions(
     visibleIssueCondition(),
     notInArray(issues.status, [...BLOCKED_INBOX_TERMINAL_STATUSES]),
   ];
+  const lotVisibilityCondition = lotIssueVisibilityCondition(filters);
+  if (lotVisibilityCondition) conditions.push(lotVisibilityCondition);
   const touchedByUserId = filters?.touchedByUserId?.trim() || undefined;
   const inboxArchivedByUserId =
     filters?.inboxArchivedByUserId?.trim() || undefined;
@@ -7871,6 +7898,8 @@ export function issueService(db: Db) {
         eq(issues.companyId, companyId),
         visibleIssueCondition(),
       ];
+      const lotVisibilityCondition = lotIssueVisibilityCondition(filters);
+      if (lotVisibilityCondition) conditions.push(lotVisibilityCondition);
       if (!filters?.q?.trim()) {
         conditions.push(isNull(issues.conversationAgentId));
         if (!filters?.touchedByUserId && !filters?.unreadForUserId && !filters?.inboxArchivedByUserId) {

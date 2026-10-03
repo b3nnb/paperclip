@@ -1041,6 +1041,10 @@ describeEmbeddedPostgres("attention service", () => {
       companyId,
       name: "Attention Project",
       status: "in_progress",
+      // Zone-b: this test exercises enrichment of a VISIBLE interaction, so the
+      // project must sit in the active lane — a zone-a (lot) project's issues
+      // are deliberately hidden from the attention feed (night-crew contract).
+      zone: "b",
       color: "#0f766e",
       icon: "rocket",
     });

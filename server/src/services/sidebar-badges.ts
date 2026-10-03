@@ -1,6 +1,6 @@
-import { and, desc, eq, inArray, not } from "drizzle-orm";
+import { and, desc, eq, inArray, not, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
-import { agents, approvals, heartbeatRuns } from "@paperclipai/db";
+import { agents, approvals, heartbeatRuns, issues, projects } from "@paperclipai/db";
 import { isHeartbeatRunVisibleInMine, type SidebarBadges } from "@paperclipai/shared";
 
 const ACTIONABLE_APPROVAL_STATUSES = ["pending", "revision_requested"];
@@ -60,6 +60,15 @@ export function sidebarBadgeService(db: Db) {
             eq(heartbeatRuns.companyId, companyId),
             eq(agents.companyId, companyId),
             not(eq(agents.status, "terminated")),
+            // Lot contract: a failed run whose issue lives in a zone-"a"
+            // project is night-crew burn — it never badges the sidebar.
+            sql`NOT EXISTS (
+              SELECT 1
+              FROM ${issues} lot_issue
+              JOIN ${projects} lot_project ON lot_project.id = lot_issue.project_id
+              WHERE lot_issue.id::text = (${heartbeatRuns.contextSnapshot} ->> 'issueId')
+                AND lot_project.zone = 'a'
+            )`,
           ),
         )
         .orderBy(heartbeatRuns.agentId, desc(heartbeatRuns.createdAt));

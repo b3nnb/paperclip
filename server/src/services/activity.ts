@@ -14,6 +14,7 @@ import {
   issueDocuments,
   issues,
   issueWorkProducts,
+  projects,
   workspaceOperations,
 } from "@paperclipai/db";
 import { hasWorkspaceRestoreFailure, safeWorkspaceRestorePath, ISSUE_CONTINUATION_SUMMARY_DOCUMENT_KEY } from "@paperclipai/shared";
@@ -368,6 +369,21 @@ export function activityService(db: Db) {
               sql`${activityLog.entityType} != 'issue'`,
               visibleIssueCondition(),
             ),
+            // Night-crew lot contract: activity about zone-"a" (lot) subjects
+            // never surfaces in the company activity feed. Issue rows whose
+            // issue lives in a lot project, and project rows about a lot
+            // project itself, are dropped server-side; everything else passes.
+            sql`NOT (
+              (${activityLog.entityType} = 'issue' AND EXISTS (
+                SELECT 1 FROM ${projects} lot_project
+                WHERE lot_project.id = ${issues.projectId} AND lot_project.zone = 'a'
+              ))
+              OR
+              (${activityLog.entityType} = 'project' AND EXISTS (
+                SELECT 1 FROM ${projects} lot_project
+                WHERE lot_project.id::text = ${activityLog.entityId} AND lot_project.zone = 'a'
+              ))
+            )`,
           ),
         )
         .orderBy(desc(activityLog.createdAt))

@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, notInArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, notInArray, or, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import {
   agents,
@@ -55,7 +55,7 @@ import {
   BLOCKER_ATTENTION_MAX_NODES,
   issueService,
 } from "./issues.js";
-import { executionIssueCondition } from "./issue-visibility.js";
+import { executionIssueCondition, issueIdOutsideLotProjectCondition, lotProjectIssueCondition } from "./issue-visibility.js";
 import { parseIssueExecutionState } from "./issue-execution-policy.js";
 import { isProspectiveBlockedTransition } from "./routable-blocked.js";
 import { evaluateAgentInvokability, type AgentOrgRow } from "./agent-invokability.js";
@@ -843,7 +843,13 @@ async function issueSummaryMap(db: Db, companyId: string, issueIds: Array<string
       eq(issues.projectWorkspaceId, projectWorkspaces.id),
       eq(projectWorkspaces.companyId, companyId),
     ))
-    .where(and(eq(issues.companyId, companyId), inArray(issues.id, ids), executionIssueCondition()));
+    .where(and(
+      eq(issues.companyId, companyId),
+      inArray(issues.id, ids),
+      executionIssueCondition(),
+      // Lot contract: summaries never hydrate for zone-"a" project issues.
+      lotProjectIssueCondition(),
+    ));
   return new Map(rows.map((row) => [row.id, {
     id: row.id,
     companyId: row.companyId,
@@ -1184,6 +1190,9 @@ export function attentionService(db: Db, serviceOptions: AttentionServiceOptions
         .where(and(
           eq(issueThreadInteractions.companyId, companyId),
           inArray(issueThreadInteractions.status, [...PENDING_INTERACTION_STATUSES]),
+          // Lot contract: pending interactions on lot issues never ask for
+          // attention; agents keep working the issue thread itself.
+          issueIdOutsideLotProjectCondition(issueThreadInteractions.issueId),
         ))
         .orderBy(desc(issueThreadInteractions.updatedAt), desc(issueThreadInteractions.id));
       // Addressee invokability needs the org graph; the audience line also needs
@@ -1281,7 +1290,12 @@ export function attentionService(db: Db, serviceOptions: AttentionServiceOptions
         originIssueId: decisions.originIssueId,
         createdAt: decisions.createdAt,
         updatedAt: decisions.updatedAt,
-      }).from(decisions).where(and(eq(decisions.companyId, companyId), eq(decisions.status, "open")))
+      }).from(decisions).where(and(
+        eq(decisions.companyId, companyId),
+        eq(decisions.status, "open"),
+        // Lot contract: decisions proposed out of a lot issue stay in the lot.
+        or(isNull(decisions.originIssueId), issueIdOutsideLotProjectCondition(decisions.originIssueId)),
+      ))
         .orderBy(desc(decisions.updatedAt), desc(decisions.id));
       const openDecisions = options.all
         ? await openDecisionQuery
@@ -1393,6 +1407,8 @@ export function attentionService(db: Db, serviceOptions: AttentionServiceOptions
           eq(issueRecoveryActions.companyId, companyId),
           inArray(issueRecoveryActions.status, [...OPEN_RECOVERY_STATUSES]),
           inArray(issueRecoveryActions.ownerType, [...HUMAN_RECOVERY_OWNER_TYPES]),
+          // Lot contract: recovery actions on lot issues stay in the lot.
+          issueIdOutsideLotProjectCondition(issueRecoveryActions.sourceIssueId),
         ))
         .orderBy(desc(issueRecoveryActions.updatedAt), desc(issueRecoveryActions.id));
       const [recoveryIssueMap, recoveryImageMap] = await Promise.all([
@@ -1585,7 +1601,13 @@ export function attentionService(db: Db, serviceOptions: AttentionServiceOptions
           updatedAt: issues.updatedAt,
         })
         .from(issues)
-        .where(and(eq(issues.companyId, companyId), eq(issues.status, "in_review"), executionIssueCondition()))
+        .where(and(
+          eq(issues.companyId, companyId),
+          eq(issues.status, "in_review"),
+          executionIssueCondition(),
+          // Lot contract: lot issues never reach the human review feed.
+          lotProjectIssueCondition(),
+        ))
         .orderBy(desc(issues.updatedAt), desc(issues.id));
       const reviewIssueIds = reviewRows.map((row) => row.id);
       const pendingReviewApprovalRows = reviewIssueIds.length === 0
