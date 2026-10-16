@@ -279,6 +279,16 @@ describe("Dashboard focus surface (enableFocusDashboard)", () => {
     expect(websiteLane.textContent).toContain("in progress");
     expect(blogLane.textContent).toContain("planned");
 
+    // Each lane's title drills into its project's detail view — the project
+    // page lists every task/issue under it. Phone-first: the tile + name are
+    // one tap target, the status chip stays a non-link badge beside them.
+    const websiteTitleLink = websiteLane.querySelector('a[href="/projects/launch-website"]');
+    expect(websiteTitleLink).not.toBeNull();
+    expect(websiteTitleLink?.textContent).toContain("Launch Website");
+    const blogTitleLink = blogLane.querySelector('a[href="/projects/crew-blog"]');
+    expect(blogTitleLink).not.toBeNull();
+    expect(blogTitleLink?.textContent).toContain("Crew Blog");
+
     // Items flow down below their own lane's band, linked to their issues.
     expect(websiteLane.querySelector('a[href="/issues/LW-1"]')).not.toBeNull();
     expect(blogLane.querySelector('a[href="/issues/CB-1"]')).not.toBeNull();

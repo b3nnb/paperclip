@@ -29,7 +29,7 @@ import { lotStateBadge, projectStatusBadge, statusBadgeDefault } from "../lib/st
 import { ActivityRow } from "../components/ActivityRow";
 import { ProjectTile } from "../components/ProjectTile";
 import { timeAgo } from "../lib/timeAgo";
-import { cn, formatCents } from "../lib/utils";
+import { cn, formatCents, projectUrl } from "../lib/utils";
 import { SHOW_TASK_PRIORITY_UI } from "../lib/ui-flags";
 import { Bot, CircleDot, DollarSign, ShieldCheck, LayoutDashboard, PauseCircle } from "lucide-react";
 import { ActiveAgentsPanel } from "../components/ActiveAgentsPanel";
@@ -218,8 +218,20 @@ function FocusLaneColumn({
         data-testid="focus-lane-header"
       >
         <div className="flex flex-wrap items-center gap-2">
-          <ProjectTile color={project.color} icon={project.icon} size="sm" />
-          <h2 className="text-lg font-semibold text-foreground">{project.name}</h2>
+          {/* The project name is the lane's drill-in: tap it to open the
+              project's detail view with every task/issue listed under it.
+              Phone-first — the tile + title form one tap target; the status
+              chip stays a non-link badge beside them. */}
+          <Link
+            to={projectUrl(project)}
+            className="flex items-center gap-2 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            data-testid="focus-lane-title-link"
+          >
+            <ProjectTile color={project.color} icon={project.icon} size="sm" />
+            <h2 className="text-lg font-semibold text-foreground underline-offset-4 hover:underline">
+              {project.name}
+            </h2>
+          </Link>
           <span
             className={cn(
               "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium capitalize",
