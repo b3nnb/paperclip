@@ -292,6 +292,16 @@ describe("Dashboard focus surface (enableFocusDashboard)", () => {
     expect(websiteDescription?.classList.contains("line-clamp-2")).toBe(true);
     expect(blogLane.querySelector('[data-testid="focus-lane-description"]')).toBeNull();
 
+    // BCR-467: lane headers are status-tinted for visual scanning across
+    // columns — one hue per project status, distinct from the grey default.
+    const websiteHeader = websiteLane.querySelector('[data-testid="focus-lane-header"]');
+    const blogHeader = blogLane.querySelector('[data-testid="focus-lane-header"]');
+    expect(websiteHeader?.classList.toString()).toContain("bg-blue-50");
+    expect(blogHeader?.classList.toString()).toContain("bg-amber-50");
+    // Lane top-border falls back to the status base hue when the project has
+    // no explicit color (Crew Blog has color: null, status: planned).
+    expect(blogLane.getAttribute("style") ?? "").toContain("var(--status-task-todo)");
+
     // Compact activity footer renders only for the lane that has events.
     expect(websiteLane.querySelector('[data-testid="focus-lane-activity"]')).not.toBeNull();
     expect(blogLane.querySelector('[data-testid="focus-lane-activity"]')).toBeNull();

@@ -20,7 +20,7 @@ import type { ProjectLotState, ProjectStatus, ProjectZone } from "@paperclipai/s
 
 /** StatusIcon circle: text + border classes */
 export const issueStatusIcon: Record<string, string> = {
-  backlog: "text-muted-foreground border-muted-foreground",
+  backlog: "text-teal-700 border-teal-700 dark:text-teal-400 dark:border-teal-400",
   todo: "text-amber-600 border-amber-600 dark:text-amber-400 dark:border-amber-400",
   in_progress: "text-blue-600 border-blue-600 dark:text-blue-400 dark:border-blue-400",
   in_review: "text-violet-600 border-violet-600 dark:text-violet-400 dark:border-violet-400",
@@ -33,7 +33,7 @@ export const issueStatusIconDefault = "text-muted-foreground border-muted-foregr
 
 /** Text-only color for issue statuses (dropdowns, labels) */
 export const issueStatusText: Record<string, string> = {
-  backlog: "text-muted-foreground",
+  backlog: "text-teal-700 dark:text-teal-400",
   todo: "text-amber-600 dark:text-amber-400",
   in_progress: "text-blue-600 dark:text-blue-400",
   in_review: "text-violet-600 dark:text-violet-400",
@@ -53,7 +53,7 @@ export const issueStatusTextDefault = "text-muted-foreground";
 // `in_review`.
 // ---------------------------------------------------------------------------
 
-export type BrandChipColor = "gray" | "blue" | "amber" | "green" | "violet" | "red";
+export type BrandChipColor = "gray" | "blue" | "amber" | "green" | "violet" | "red" | "teal";
 
 export const brandChipBadge: Record<BrandChipColor, string> = {
   gray: "bg-[#F5F3F0] text-[#52585D] border-[#A8AEB2] dark:bg-[#6e696024] dark:text-[#9A958A] dark:border-[#9e958a73]",
@@ -62,6 +62,7 @@ export const brandChipBadge: Record<BrandChipColor, string> = {
   green: "bg-[#DCFCE7] text-[#188A3C] border-[#22C55E] dark:bg-[#22c55e1f] dark:text-[#22C55E] dark:border-[#22c55e73]",
   violet: "bg-[#EDE9FE] text-[#5B21B6] border-[#7C3AED] dark:bg-[#7c3aed2e] dark:text-[#7C3AED] dark:border-[#7c3aed73]",
   red: "bg-[#FEE2E2] text-[#991B1B] border-[#DC2626] dark:bg-[#dc26262e] dark:text-[#DC2626] dark:border-[#dc262673]",
+  teal: "bg-[#CCFBF1] text-[#0F766E] border-[#14B8A6] dark:bg-[#14b8a624] dark:text-[#2DD4BF] dark:border-[#14b8a673]",
 };
 
 // ---------------------------------------------------------------------------
@@ -112,8 +113,8 @@ export const statusBadge: Record<string, string> = {
   draft: "bg-muted text-muted-foreground",
 
   // Issue statuses — consistent hues with issueStatusIcon above (PAP-75 brand
-  // mapping: todo → amber, in_progress → blue "liveness").
-  backlog: "bg-muted text-muted-foreground",
+  // mapping: todo → amber, in_progress → blue "liveness", backlog → teal).
+  backlog: "bg-teal-100 text-teal-700 dark:bg-teal-900/50 dark:text-teal-300",
   todo: "bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300",
   in_progress: "bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300",
   in_review: "bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300",
@@ -146,18 +147,48 @@ export const statusBadgeDefault = "bg-muted text-muted-foreground";
 // `planned`, and `cancelled` all collapse to the same muted recipe there, so
 // the five project statuses would not read as distinct in a picker list.
 // Projects get a dedicated map built from the brand chip families: `backlog`
-// stays inert gray, `planned` rides the amber "queued" family, `in_progress`
-// is the liveness blue, `completed` is green, and `cancelled` is red so it
-// never reads as backlog. Shared names (`planned`, `cancelled`) keep their
-// generic-map recipes for goals and issues; only project chips change.
+// rides the teal family, `planned` rides the amber "queued" family,
+// `in_progress` is the liveness blue, `completed` is green, and `cancelled`
+// is red so it never reads as backlog. Shared names (`planned`, `cancelled`)
+// keep their generic-map recipes for goals and issues; only project chips
+// change.
 // ---------------------------------------------------------------------------
 
 export const projectStatusBadge: Record<ProjectStatus, string> = {
-  backlog: `border ${brandChipBadge.gray}`,
+  backlog: `border ${brandChipBadge.teal}`,
   planned: `border ${brandChipBadge.amber}`,
   in_progress: `border ${brandChipBadge.blue}`,
   completed: `border ${brandChipBadge.green}`,
   cancelled: `border ${brandChipBadge.red}`,
+};
+
+// ---------------------------------------------------------------------------
+// Focus-dashboard swim-lane accents (BCR-467)
+//
+// Each lane column gets a status-tinted header band so the eye can scan
+// across columns quickly — one hue per project status, subtle enough to
+// separate without overwhelming. The lane's top-border accent falls back to
+// the status base hue when the project has no explicit `color` (the
+// `projectStatusBorderVar` CSS-var reference keeps the value token-gate-safe:
+// a var() string is not a raw hex literal).
+// ---------------------------------------------------------------------------
+
+/** Lane header background tint per project status — subtle, mode-aware. */
+export const projectStatusLaneAccent: Record<ProjectStatus, string> = {
+  backlog: "bg-teal-50 dark:bg-teal-950/30",
+  planned: "bg-amber-50 dark:bg-amber-950/30",
+  in_progress: "bg-blue-50 dark:bg-blue-950/30",
+  completed: "bg-green-50 dark:bg-green-950/30",
+  cancelled: "bg-red-50 dark:bg-red-950/30",
+};
+
+/** Lane top-border CSS-var fallback per project status (used when no project.color). */
+export const projectStatusBorderVar: Record<ProjectStatus, string> = {
+  backlog: "var(--status-task-backlog)",
+  planned: "var(--status-task-todo)",
+  in_progress: "var(--status-task-in_progress)",
+  completed: "var(--status-task-done)",
+  cancelled: "var(--status-task-cancelled)",
 };
 
 // ---------------------------------------------------------------------------

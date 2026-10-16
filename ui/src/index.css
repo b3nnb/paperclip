@@ -197,7 +197,7 @@
      `.status-fill` and inline icon helpers derive the light vs dark
      fill/text/border from these via color-mix, so a single hue covers both
      modes. Values mirror the PAP-75 brand palette (gray inert, blue liveness,
-     amber queued, violet review, green done, red blocked). */
+     amber queued, violet review, green done, red blocked, teal backlog). */
   --status-agent-idle: #a8aeb2;
   --status-agent-running: #2563eb;
   --status-agent-paused: #f59e0b;
@@ -211,7 +211,7 @@
   --dashboard-list-time-width: calc(var(--spacing) * 16);
   --dashboard-task-list-columns: var(--dashboard-list-leading-width) minmax(0, 1fr) calc(var(--spacing) * 36) var(--dashboard-list-id-width) var(--dashboard-list-time-width);
   --dashboard-activity-list-columns: var(--dashboard-list-leading-width) minmax(0, 1fr) var(--dashboard-list-id-width) var(--dashboard-list-time-width);
-  --status-task-backlog: #a8aeb2;
+  --status-task-backlog: #14b8a6;
   --status-task-todo: #f59e0b;
   --status-task-in_progress: #2563eb;
   --status-task-in_review: #7c3aed;
@@ -229,7 +229,7 @@
      `in_queue` is the BLOCKED shape recoloured to the in_progress blue
      (replaces the bespoke teal "covered" state). Light values here; the
      `.dark` block below overrides the hues that need a mode-specific value. */
-  --status-task-icon-backlog: #52585d;   /* gray darkened — 7.21:1 on paper */
+  --status-task-icon-backlog: #0f766e;   /* teal-700 — ~5.5:1 on paper, clears 3:1 AA */
   --status-task-icon-todo: #cc7a00;       /* amber darkened — clears 3:1 */
   --status-task-icon-in_progress: var(--color-blue-600); /* matches nav dots and live labels */
   --status-task-icon-in_review: var(--status-task-in_review);     /* #7c3aed (light) */
@@ -444,7 +444,7 @@
   /* Dark-mode status-icon hues. The lighter progress blue gives bare glyphs
      contrast comparable to the neighboring gray, purple, and green icons.
      Blocked retains its base red; in_queue follows the progress icon blue. */
-  --status-task-icon-backlog: #9a958a;
+  --status-task-icon-backlog: #2dd4bf;
   --status-task-icon-todo: #fbbf24;
   --status-task-icon-in_progress: var(--color-blue-400); /* matches nav dots and live labels */
   --status-task-icon-in_review: #9474f0;  /* deeper than violet-400, reads purple */

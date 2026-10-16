@@ -24,7 +24,7 @@ import { EmptyState } from "../components/EmptyState";
 import { StatusIcon } from "../components/StatusIcon";
 import { usePublishSharedQueryData, useSharedPollingQuery } from "../hooks/useSharedPolling";
 import { useFocusDashboardEnabled } from "../hooks/useFocusDashboardEnabled";
-import { lotStateBadge, projectStatusBadge, statusBadgeDefault } from "../lib/status-colors";
+import { lotStateBadge, projectStatusBadge, projectStatusLaneAccent, projectStatusBorderVar, statusBadgeDefault } from "../lib/status-colors";
 
 import { ActivityRow } from "../components/ActivityRow";
 import { ProjectTile } from "../components/ProjectTile";
@@ -206,15 +206,21 @@ function FocusLaneColumn({
       className="min-w-0 gap-0 overflow-hidden border-t-4 py-0 md:flex-1"
       data-testid="focus-lane"
       // The lane accent is the project's own color riding the column's top
-      // border. Deliberately a dynamic style value — token-gate-safe by
-      // construction (a runtime value is not a raw hex literal); lanes
-      // without a color keep the default border.
-      style={project.color ? { borderTopColor: project.color } : undefined}
+      // border, falling back to the status base hue when no project color is
+      // set. Deliberately a dynamic style value — token-gate-safe by
+      // construction (a runtime value / CSS-var reference is not a raw hex
+      // literal); lanes without a color keep the status-tinted default.
+      style={{
+        borderTopColor: project.color ?? projectStatusBorderVar[project.status as ProjectStatus],
+      }}
     >
       {/* Lane header band: the project's title + status across the top of
           its column — the band every lane's items hang below. */}
       <div
-        className="border-b border-border bg-muted/40 px-4 py-3"
+        className={cn(
+          "border-b border-border px-4 py-3",
+          projectStatusLaneAccent[project.status as ProjectStatus] ?? "bg-muted/40",
+        )}
         data-testid="focus-lane-header"
       >
         <div className="flex flex-wrap items-center gap-2">
